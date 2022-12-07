@@ -18,18 +18,21 @@
 														(:blacklist-patterns blog))))
 
 
-
+;############################################################################
+; MELTING ASPHALT
+;############################################################################
 
 (def MA (map->Blog {:name "Melting Asphalt" 
-																				:home-url "https://meltingasphalt.com/"
-																				:blacklist #{"https://meltingasphalt.com/about/"
-																																	"https://meltingasphalt.com/subscribe/"
-																																	"https://meltingasphalt.com/what-im-reading/"
-																																	"https://meltingasphalt.com/goodies/"
-																																	"https://meltingasphalt.com/"
-																																	"https://meltingasphalt.com/archive/"
-																																	"https://meltingasphalt.com/copyright/"
-																																	"https://meltingasphalt.com/series/"}
+																				:home-url "https://meltingasphalt.com"
+																				:blacklist #{"http://meltingasphalt.com/about"
+																																	"http://meltingasphalt.com/subscribe"
+																																	"http://meltingasphalt.com/what-im-reading"
+																																	"http://meltingasphalt.com/goodies"
+																																	"http://meltingasphalt.com"
+																																	"http://meltingasphalt.com/archive"
+																																	"http://meltingasphalt.com/copyright"
+																																	"http://meltingasphalt.com/series"
+																																	"http://meltingasphalt.com/contact"}
 																				:blacklist-patterns []}))
 
 

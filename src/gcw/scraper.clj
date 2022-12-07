@@ -65,8 +65,11 @@
 
 ; (def weburi? (comp weburl? uri/uri-str))
 
-(defn same-host? [u1 u2]
+(defn same-host-url? [u1 u2]
 		(= (:host (uri/parse u1)) (:host (uri/parse u2))))
+
+(defn same-host-uri? [u1 u2]
+		(= (:host u1) (:host u2)))
 
 (defn trash-href? [href]
 		(or
@@ -148,22 +151,26 @@
 												uris
 												(keys uris))))
 
+
 (defn recursively-scrape-uri [base-uri seed-uris]
+		; (println base-uri)
+		; (println seed-uris)
 		(loop [frontier (into #{} (conj seed-uris base-uri)) visited #{}]
 				(if (empty? frontier)
 								visited
 								(let [cur-uri (first frontier)
 														dom 				(uri->dom cur-uri)]
-														(recur (->> (extract-uris dom base-uri) 
-																										(map normalize-uri)
-																										(filter (partial same-host? base-uri)) ;TODO(jecneps): uri/url error for same-host?
-																										(filter #(not (contains? (conj visited cur-uri))))
-																										(into (disj frontier cur-uri)))
+														(recur (->> (extract-uris dom cur-uri) 
+																																								(map normalize-uri)
+																																								(filter (partial same-host-uri? base-uri)) ;TODO(jecneps): uri/url error for same-host?
+																																								(filter #(not (contains? (conj visited cur-uri) %)))
+																																								(into (disj frontier cur-uri)))
 																					(conj visited cur-uri))))))
 
 (defn recursively-scrape-url [base-url seed-urls]
-		(recursively-scrape-uri (normalize-uri (uri/parse base-url))
-																										(map (comp normalize-uri uri/uri-str) seed-urls)))
+		(->> (recursively-scrape-uri (normalize-uri (uri/parse base-url))
+																															(map (comp normalize-uri uri/parse) seed-urls))
+							(map uri/uri-str)))
 
 (defn clean-post-content [dom]
 		(->> dom
