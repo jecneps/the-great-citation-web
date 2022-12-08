@@ -4,7 +4,7 @@
 												[lambdaisland.uri :as uri]
 												[gcw.blogs :as blogs])
 		(:import
-    [java.net URI]
+    [java.net URI InetAddress]
     [javax.net.ssl
      SNIHostName SNIServerName SSLEngine SSLParameters]))
 
@@ -51,30 +51,50 @@
 ;##################################################################################
 ; URL/URI UTILS
 ;##################################################################################
+(defn ip-string? [s]
+			;(println (str "ip-string?: s=" s " type=" (type s)))
+		 (re-matches #"\d*?\.\d*?\.\d*?\.\d*?" s))
+
+(defn ip->bytes [ip]
+		(->> (clojure.string/split ip #"\.")
+							(map #(. Integer parseInt %))
+							(map unchecked-byte)
+							byte-array))
+
+(defn ip-uri->dn [parent-uri uri]
+		(if (nil? (:host uri)) ;seems like this is my main choke point for filtering out bad links. I will lose some real ones though (missing "//")
+						(do (println (format "Bad URL: %s did not have a host when parsed." (uri/uri-str uri)))
+											nil)
+						(if-let [ip (ip-string? (:host uri))]
+										(if (= ip (.getHostAddress (InetAddress/getByName (:host parent-uri))))
+														(assoc uri :host (:host parent-uri))
+														uri)
+										uri)))
+
+(defn ip-url->dn [parent-url url]
+		(uri/uri-str (ip-uri->dn (uri/parse parent-url) (uri/parse url))))
 
 (defn absolutify-uri [parent-uri uri]
 		{:pre [(not (instance? java.lang.String uri))]}
 		(if (uri/relative? uri)
 						(assoc uri :host (:host parent-uri) :scheme (:scheme parent-uri))
-						uri))
-
-; (defn weburl? [url]
-; 		(= "200"
-; 					(:status @(http/get url {:insecure? true
-; 																														:client client}))))
-
-; (def weburi? (comp weburl? uri/uri-str))
+						(ip-uri->dn parent-uri uri)))
 
 (defn same-host-url? [u1 u2]
 		(= (:host (uri/parse u1)) (:host (uri/parse u2))))
 
 (defn same-host-uri? [u1 u2]
-		(= (:host u1) (:host u2)))
+		;(println (str "same-host-uri?: h1=" (uri/uri-str u1) " h2=" (uri/uri-str u2)))
+		(if-let [ip (ip-string? (:host u2))] ;TODO(jecneps): better matching (IPv6 and such)
+										;MA links are sometimes ip addresses instead of domain names
+										(= ip (.getHostAddress (InetAddress/getByName (:host u1)))) 
+										(= (:host u1) (:host u2))))
 
 (defn trash-href? [href]
 		(or
 				(not (instance? java.lang.String href))
 				(= href "")
+				(re-find #"^mailto:" href)
 				(re-find #"^javascript:" href)
 				(re-find #"^#" href)))
 
@@ -82,21 +102,29 @@
 		(if-let [path (:path uri)]
 										(if-let [[_ file] (re-find #"\.(.*)$" path)]
 																			(not (contains? #{"html" "pdf"} file))))) ;TODO(jecnpes): possibly extend? .txt?
-;
+
 ; still un-normalized, uri could point to a fragment,
 (defn href->uri [parent-uri href]
 		(if (trash-href? href)
 						nil
-						(let [uri (absolutify-uri parent-uri (uri/parse href))]
-																	(if (non-html-resource? uri)
-																					nil
-																					uri))))
+						(if-let [uri (absolutify-uri parent-uri (uri/parse href))]
+														(if (non-html-resource? uri)
+																		nil
+																		uri))))
+
+(defmulti schema identity)
+(defmethod schema "meltingasphalt.com"
+		[_] "http")
+(defmethod schema "thelastpsychiatrist.com"
+		[_] "https")
+(defmethod schema "samzdat.com"
+		[_] "https")
 
 ; assumes uri is a post, keeps only post centric info and normalizes /'s
 (defn normalize-uri [uri]
 		(-> (assoc uri 
-												:host (clojure.string/replace (:host uri) #"/*$" "")
-												:scheme "http" ;TODO(jecneps): will this be a problem later for scraping? Is that what :insecure? is for?
+												;:host (clojure.string/replace (:host uri) #"/*$" "") I think i don't need this
+											;	:scheme (schema (:host uri))
 												:path (let [path (:path uri)
 																								s (if (not= \/ (first path))
 																														(str "/" path)
@@ -138,7 +166,7 @@
 
 (defn deduplicate-uris [network parent-uri uris]
 		(let [m (partition-uris network parent-uri uris)]
-				{:self-links (into #{} (map normalize-uri (:self-links m)))
+				{:self-links (disj (into #{} (map normalize-uri (:self-links m))) parent-uri)
 					:in-network-links (into #{} (map normalize-uri (:in-network-links m)))
 					:out-of-network-links (into #{} (:out-of-network-links m))}))
 
@@ -160,11 +188,20 @@
 								visited
 								(let [cur-uri (first frontier)
 														dom 				(uri->dom cur-uri)]
-														(recur (->> (extract-uris dom cur-uri) 
-																																								(map normalize-uri)
-																																								(filter (partial same-host-uri? base-uri)) ;TODO(jecneps): uri/url error for same-host?
-																																								(filter #(not (contains? (conj visited cur-uri) %)))
-																																								(into (disj frontier cur-uri)))
+														(recur (let [vis (conj visited cur-uri)]
+																										(reduce (fn [acc uri]
+																																						(if (not (contains? vis uri))
+																																										(if (same-host-uri? base-uri uri)
+																																														(conj acc (normalize-uri uri))
+																																														acc)
+																																										acc)) 
+																																		(disj frontier cur-uri) 
+																																		(extract-uris dom cur-uri)))
+														; (->> (extract-uris dom cur-uri) 
+														; 																										(map normalize-uri)
+														; 																										(filter (partial same-host-uri? base-uri))
+														; 																										(filter #(not (contains? (conj visited cur-uri) %)))
+														; 																										(into (disj frontier cur-uri)))
 																					(conj visited cur-uri))))))
 
 (defn recursively-scrape-url [base-url seed-urls]
@@ -197,3 +234,42 @@
 																	:self-links
 																	(fn [urls] (filter #(not (blogs/blacklisted-url? blog %)) urls)))))))
 
+(defn blog->PostData [blog]
+		(->> (recursively-scrape-url (:home-url blog) #{(:home-url blog)})
+							(into #{})
+							(filter #(not (blogs/blacklisted-url? blog %)))
+							(map (partial url->PostData blog))))
+
+(defn archive->uris [blog uri]
+		(as-> (uri->dom uri) $
+								(blogs/post-archives blog $)
+								(extract-uris $ uri)))
+
+(defn uris->post-uris [blog uris]
+		(reduce (fn [acc uri]
+														(if (same-host-uri? (uri/parse (:home-url blog)) uri)
+																		(let [normed (normalize-uri uri)]
+																							(if (not (blogs/blacklisted-url? blog  (uri/uri-str normed)))
+																											(conj acc normed)
+																											acc))
+																			acc))
+											#{}
+											uris))
+
+(defn archive->post-uris [blog uri]
+		(uris->post-uris blog (archive->uris blog uri)))
+
+;##################################################################################
+; MANUAL DATA FIXES
+;##################################################################################
+
+(defn fix-ip-links [blog post]
+		(let [self-links (:self-links post) out-links (:out-of-network-links post)
+								ip-links (filter #(ip-string? (:host (uri/parse %))) out-links)]
+				(assoc post 
+											:self-links 
+											(into self-links (map (partial ip-url->dn (:home-url blog))
+																																	ip-links))
+											:out-of-network-links (filter #(not (contains? (into #{} ip-links) %)) out-links))))
+
+(defn t [] (println "test"))
