@@ -1,0 +1,25 @@
+; Aborting connect, error determining connect sequence.
+; Aborting connect, error determining connect sequence.
+; Aborting connect, error determining connect sequence.
+; Aborting connect, error determining connect sequence.
+; Connecting ...
+; No nrepl port file found.
+; Evaluating file: welcome_to_clojure.clj
+"File loaded. Welcome to Clojure! ♥️"
+clj꞉welcome-to-clojure꞉> 
+"Hello World"
+clj꞉welcome-to-clojure꞉> 
+; Evaluating file: hello_paredit.clj
+"Hello Calva Paredit λ 💖 🚀"
+clj꞉hello-paredit꞉> 
+"I ~ 💖 ~ Paredit"
+clj꞉hello-paredit꞉> 
+; Evaluating file: core.clj
+; Execution error (FileNotFoundException) at gcw.core/eval5975$loading (core.clj:1).
+; Could not locate lambdaisland/uri__init.class, lambdaisland/uri.clj or lambdaisland/uri.cljc on classpath.
+; Evaluation of file core.clj failed: class clojure.lang.Compiler$CompilerException
+clj꞉gcw.core꞉>  (write-to (take 10 (cycle [1 4])) "what.clj
+                                                  ")
+; Syntax error compiling at (/home/hazard/code/the-great-citation-web/.calva/output-window/output.calva-repl:21:16).
+; Unable to resolve symbol: write-to in this context
+clj꞉gcw.core꞉> 
